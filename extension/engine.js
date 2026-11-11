@@ -1,5 +1,5 @@
 /* Independent queue and playback state, shared with the Node tests. */
-globalThis.ShareMusic = (() => {
+globalThis.AutoPlayall = (() => {
   class Queue {
     constructor(length, random = Math.random) {
       this.length = length; this.random = random;
