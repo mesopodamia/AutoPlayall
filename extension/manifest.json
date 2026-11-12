@@ -1,8 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "AutoPlayall",
-  "version": "1.0.1",
-  "description": "播放当前页面的全部歌曲，支持顺序循环与每轮不重复的随机播放。",
+  "name": "AutoPlayAll",
+  "version": "1.1.0",
+  "description": "识别网页音频播放器和直接音频链接，支持顺序循环、随机不重复播放，并保留世纪音乐网适配。",
+  "permissions": ["activeTab", "scripting"],
+  "action": {"default_title": "AutoPlayAll：扫描当前页面音频"},
+  "background": {"service_worker": "background.js"},
   "content_scripts": [{
     "matches": ["https://www.4c44.com/*", "https://4c44.com/*"],
     "js": ["engine.js", "content.js"],

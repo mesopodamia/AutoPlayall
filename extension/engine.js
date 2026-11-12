@@ -1,5 +1,5 @@
 /* Independent queue and playback state, shared with the Node tests. */
-globalThis.AutoPlayall = (() => {
+globalThis.AutoPlayAll = (() => {
   class Queue {
     constructor(length, random = Math.random) {
       this.length = length; this.random = random;
@@ -101,5 +101,32 @@ globalThis.AutoPlayall = (() => {
     const key=`${date.getFullYear()}${pad(date.getMonth()+1)}${pad(date.getDate())}${pad(date.getHours())}${pad(date.getMinutes())}4c44`;
     return new URLSearchParams({id,type:'music',key});
   }
-  return {Queue,Player,collectTracks,requestBody};
+  function isSupportedSite(base) {
+    return ['www.4c44.com','4c44.com'].includes(new URL(base).hostname);
+  }
+  function collectGenericTracks(doc, base) {
+    const tracks=[],seen=new Set();
+    const audioExtension=/\.(mp3|m4a|ogg|oga|wav|flac|aac|opus|webm)$/i;
+    function add(raw,title,directAudio=false) {
+      if (!raw) return;
+      try {
+        const url=new URL(raw,doc.baseURI||base);
+        if (!['http:','https:'].includes(url.protocol)) return;
+        if (!directAudio && !audioExtension.test(url.pathname)) return;
+        url.hash='';
+        if (seen.has(url.href)) return;
+        seen.add(url.href);
+        let filename;try {filename=decodeURIComponent(url.pathname.split('/').pop());}catch {filename=url.pathname.split('/').pop();}
+        tracks.push({id:url.href,url:url.href,kind:'direct',title:(title||'').trim()||filename||`音频 ${tracks.length+1}`});
+      } catch { /* Ignore malformed page links. */ }
+    }
+    for (const audio of doc.querySelectorAll('audio')) {
+      const sources=Array.from(audio.querySelectorAll('source[src]'));
+      const source=sources.find(s=>!s.getAttribute('type') || !audio.canPlayType || audio.canPlayType(s.getAttribute('type')));
+      add(audio.currentSrc||audio.getAttribute('src')||source?.getAttribute('src'),audio.getAttribute('title')||audio.getAttribute('aria-label'),true);
+    }
+    for (const link of doc.querySelectorAll('a[href]')) add(link.getAttribute('href'),link.textContent);
+    return tracks;
+  }
+  return {Queue,Player,collectTracks,collectGenericTracks,isSupportedSite,requestBody};
 })();

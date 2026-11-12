@@ -1,9 +1,12 @@
 (() => {
   'use strict';
-  if (document.getElementById('autoplayall-panel')) return;
-  const tracks=AutoPlayall.collectTracks(document,location.href);
-  // Verification pages have no player or song links: wait for normal navigation.
-  if (!tracks.length || !document.querySelector('#player, .play_list, a[href*="/mp3/"]')) return;
+  const existing=document.getElementById('autoplayall-panel');
+  if (existing) {existing.shadowRoot.querySelector('section').classList.remove('small'); existing.shadowRoot.querySelector('#fold').textContent='收起';return;}
+  const siteMode=AutoPlayAll.isSupportedSite(location.href);
+  const scan=()=>siteMode?AutoPlayAll.collectTracks(document,location.href):AutoPlayAll.collectGenericTracks(document,location.href);
+  let tracks=scan();
+  // On the auto-enabled site, do not place controls on verification screens.
+  if (siteMode && (!tracks.length || !document.querySelector('#player, .play_list, a[href*="/mp3/"]'))) return;
   const host=document.createElement('div'); host.id='autoplayall-panel';
   const root=host.attachShadow({mode:'open'});
   root.innerHTML=`<style>
@@ -16,19 +19,29 @@
     audio{display:block;width:100%;height:40px;margin:12px 0}details{font-size:12px;margin-top:10px}ol{max-height:140px;overflow:auto;padding-left:25px;line-height:1.8}li.current{font-weight:bold;color:#ce2c74}
     section.small .body{display:none}#fold{padding:3px 9px}
     .hint{color:#746772;font-size:12px}
-  </style><section><header><span>AutoPlayall · ${tracks.length} 首</span><button id="fold" aria-label="收起面板">收起</button></header>
+  </style><section><header><span id="heading">AutoPlayAll · ${tracks.length} 首</span><button id="fold" aria-label="收起面板">收起</button></header>
   <div class="body"><p id="status" role="status" aria-live="polite">点击开始，播放当前页面全部歌曲</p>
-  <div class="actions"><select id="mode" aria-label="播放方式"><option value="sequence">顺序循环</option><option value="random">随机不重复</option></select><button id="start">开始播放</button><button id="next">下一首</button><button id="stop">停止</button></div>
-  <audio controls preload="auto"></audio><p class="hint">随机模式每轮播完前不重复；只使用当前页的歌曲列表。</p><details><summary>查看播放队列</summary><ol></ol></details></div></section>`;
+  <div class="actions"><select id="mode" aria-label="播放方式"><option value="sequence">顺序循环</option><option value="random">随机不重复</option></select><button id="start">开始播放</button><button id="next">下一首</button><button id="stop">停止</button><button id="scan">重新扫描</button></div>
+  <audio controls preload="auto"></audio><p class="hint"></p><details><summary>查看播放队列</summary><ol></ol></details></div></section>`;
   document.documentElement.append(host);
   const $=s=>root.querySelector(s);
   const audio=$('audio');
-  const rows=tracks.map(t=>{const li=document.createElement('li');li.textContent=t.title; $('ol').append(li);return li;});
+  let rows=[];
+  function renderQueue() {
+    $('ol').replaceChildren();
+    rows=tracks.map(t=>{const li=document.createElement('li');li.textContent=t.title; $('ol').append(li);return li;});
+    $('#heading').textContent=`AutoPlayAll · ${tracks.length} 首`;
+    $('.hint').textContent=siteMode?'本站适配 · 随机模式每轮不重复':'通用模式 · 识别音频播放器和音频直链；动态加载后可重新扫描';
+    $('#start').disabled=$('#next').disabled=!tracks.length;
+    $('#status').textContent=tracks.length?'点击开始，播放当前页面音频':'未找到可播放音频。请先加载网页播放器，再点击重新扫描。';
+  }
+  renderQueue();
   let timer;
-  const player=new AutoPlayall.Player(tracks,audio,async track=>{
+  const player=new AutoPlayAll.Player(tracks,audio,async track=>{
+    if (track.kind==='direct') return track.url;
     const response=await fetch('/js/play.php',{
       method:'POST',credentials:'same-origin',
-      body:AutoPlayall.requestBody(track.id),signal:AbortSignal.timeout(20000)
+      body:AutoPlayAll.requestBody(track.id),signal:AbortSignal.timeout(20000)
     });
     if (!response.ok) throw Error('音源请求失败');
     const data=await response.json();
@@ -51,6 +64,11 @@
   });
   $('#next').addEventListener('click',()=>{silenceSite(); if(player.active) void player.next();else void player.start();});
   $('#stop').addEventListener('click',()=>player.stop());
+  $('#scan').addEventListener('click',()=>{
+    clearTimeout(timer);player.stop();tracks=scan();
+    player.tracks=tracks;player.queue=new AutoPlayAll.Queue(tracks.length);
+    player.queue.setMode($('#mode').value);renderQueue();
+  });
   $('#mode').addEventListener('change',event=>player.queue.setMode(event.target.value));
   $('#fold').addEventListener('click',()=>{
     const small=$('section').classList.toggle('small'); $('#fold').textContent=small?'展开':'收起';
